@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { Gamepad2, User, Settings, LogOut, PlusCircle, Monitor } from 'lucide-react';
 import { resolveDashboardRole } from './auth';
 
@@ -365,7 +365,7 @@ function AdminDashboard() {
                       <p className="font-semibold">{order.itemName}</p>
                       <p className="text-sm text-muted-foreground">{order.customerName} • {order.duration}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-sm ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                    <span className={`rounded-full px-3 py-1 text-sm ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'b[...]
                       {order.status}
                     </span>
                   </div>
@@ -546,7 +546,7 @@ function UserDashboard() {
             {orders.map((order) => (
               <li key={order.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
                 <span>{order.itemName} • {order.customerName}</span>
-                <span className={`rounded-full px-2 py-1 text-xs ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                <span className={`rounded-full px-2 py-1 text-xs ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'bg-ye[...]`
                   {order.status}
                 </span>
               </li>
