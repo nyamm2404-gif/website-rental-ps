@@ -1,18 +1,617 @@
-import { useMemo, useState } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { ArrowRight, CalendarDays, Check, ChevronRight, CircleDollarSign, ClipboardList, Clock3, Gamepad2, LayoutDashboard, LogOut, Menu, PackageCheck, Plus, Search, ShieldCheck, Sparkles, Users, X } from "lucide-react";
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Gamepad2, User, Settings, LogOut, PlusCircle, Monitor } from 'lucide-react';
+import { resolveDashboardRole } from './auth';
 
-type ConsoleItem = { id:number; name:string; unit:string; price:number; available:boolean; image:string; badge:string };
-const consoles: ConsoleItem[] = [
-  { id: 1, name: "PlayStation 5", unit: "PS5 • DualSense", price: 150000, available: true, badge: "Paling diminati", image: "https://images.unsplash.com/photo-1550176593-d107c56ca211?w=1000&h=700&fit=crop&auto=format" },
-  { id: 2, name: "PlayStation 4 Pro", unit: "PS4 Pro • 2 Controller", price: 100000, available: true, badge: "Hemat", image: "https://images.unsplash.com/photo-1603481546238-487240415921?w=1000&h=700&fit=crop&auto=format" },
-  { id: 3, name: "PlayStation 5 Slim", unit: "PS5 Slim • 4K Ready", price: 175000, available: false, badge: "Premium", image: "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?w=1000&h=700&fit=crop&auto=format" },
+type InventoryItem = {
+  id: number;
+  name: string;
+  price: string;
+  stock: number;
+  rented: number;
+};
+
+type OrderItem = {
+  id: number;
+  itemId: number;
+  itemName: string;
+  customerName: string;
+  duration: string;
+  createdAt: string;
+  status: 'Pending' | 'Confirmed' | 'Rejected';
+};
+
+type InventoryContextValue = {
+  inventory: InventoryItem[];
+  orders: OrderItem[];
+  adjustStock: (id: number, delta: number) => void;
+  createOrder: (itemId: number, customerName: string, duration: string) => boolean;
+  updateOrderStatus: (orderId: number, status: OrderItem['status']) => void;
+};
+
+const INVENTORY_STORAGE_KEY = 'ps-rental-inventory';
+const ORDERS_STORAGE_KEY = 'ps-rental-orders';
+const initialInventory: InventoryItem[] = [
+  { id: 1, name: 'PlayStation 5', price: 'Rp 150.000 / Hari', stock: 5, rented: 2 },
+  { id: 2, name: 'PlayStation 4 Pro', price: 'Rp 100.000 / Hari', stock: 3, rented: 1 },
 ];
-const money = (number: number) => new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(number);
-function Brand() { return <Link to="/" className="flex items-center gap-3 font-semibold tracking-tight"><span className="grid size-10 place-items-center rounded-xl bg-primary text-white shadow-lg shadow-blue-500/30"><Gamepad2 size={21}/></span><span>main<span className="text-primary">.ps</span></span></Link> }
-function Header({ user=false }: {user?:boolean}) { const [open,setOpen]=useState(false); const nav=useNavigate(); return <header className="sticky top-0 z-30 border-b border-white/8 bg-background/85 backdrop-blur-xl"><div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-5 lg:px-8"><Brand/><nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex"><a href="#koleksi" className="hover:text-foreground">Koleksi</a><a href="#cara-kerja" className="hover:text-foreground">Cara kerja</a><a href="#bantuan" className="hover:text-foreground">Bantuan</a></nav>{user?<div className="flex items-center gap-3"><span className="hidden text-sm text-muted-foreground sm:block">Halo, <b className="text-foreground">Pemain</b></span><button onClick={()=>nav("/")} className="rounded-xl border border-border p-2.5 text-muted-foreground hover:border-red-400 hover:text-red-300" aria-label="Keluar"><LogOut size={18}/></button></div>:<div className="hidden gap-3 md:flex"><Link className="rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-white/5" to="/login">Login</Link><Link className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-500" to="/daftar">Buat akun <ArrowRight className="ml-1 inline" size={15}/></Link></div>}<button onClick={()=>setOpen(!open)} className="md:hidden"><Menu/></button></div>{open&&<div className="border-t border-border px-5 py-4 md:hidden"><div className="grid gap-2"><Link to="/login">Login</Link><Link to="/daftar">Buat akun</Link></div></div>}</header> }
-function Landing(){ return <div className="min-h-screen overflow-hidden"><Header/><main><section className="relative isolate"><div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_78%_20%,rgba(38,100,255,.24),transparent_26%),radial-gradient(circle_at_27%_80%,rgba(43,166,255,.14),transparent_25%)]"/><div className="bg-grid absolute inset-0 -z-10 opacity-60 [mask-image:linear-gradient(to_bottom,black,transparent_90%)]"/><div className="mx-auto grid max-w-7xl gap-12 px-5 pb-20 pt-16 lg:grid-cols-[1.05fr_.95fr] lg:px-8 lg:pb-28 lg:pt-26"><div className="self-center"><div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-400/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest text-blue-200"><Sparkles size={13}/> Rental console #1 di kotamu</div><h1 className="max-w-3xl text-5xl font-bold leading-[1.05] tracking-[-.055em] sm:text-6xl lg:text-7xl">Main tanpa batas.<br/><span className="text-primary">Rental tanpa ribet.</span></h1><p className="mt-7 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">Pilih konsol PlayStation terbaik, tentukan durasi, lalu nikmati game favoritmu. Unit bersih, controller terawat, siap antar.</p><div className="mt-9 flex flex-wrap gap-3"><Link to="/daftar" className="rounded-xl bg-primary px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500">Mulai pesan sekarang <ArrowRight className="ml-2 inline" size={17}/></Link><Link to="/login" className="rounded-xl border border-border bg-card/50 px-5 py-3.5 text-sm font-semibold hover:bg-secondary">Sudah punya akun</Link></div><div className="mt-12 flex gap-8 border-t border-border pt-6"><div><b className="text-xl">4.9/5</b><p className="mt-1 text-xs text-muted-foreground">dari 1.200+ penyewa</p></div><div><b className="text-xl">24/7</b><p className="mt-1 text-xs text-muted-foreground">dukungan pelanggan</p></div><div><b className="text-xl">30 mnt</b><p className="mt-1 text-xs text-muted-foreground">estimasi konfirmasi</p></div></div></div><div className="relative mx-auto w-full max-w-xl"><div className="absolute -inset-7 rounded-[3rem] bg-blue-500/20 blur-3xl"/><div className="glow relative overflow-hidden rounded-[2rem] border border-white/10 bg-card p-3"><img src="https://images.unsplash.com/photo-1550176593-d107c56ca211?w=1200&h=920&fit=crop&auto=format" alt="Set up bermain game di ruang gelap" className="h-[430px] w-full rounded-[1.45rem] object-cover opacity-85"/><div className="absolute inset-x-8 bottom-8 rounded-2xl border border-white/10 bg-[#0a1021]/90 p-4 backdrop-blur-md"><div className="flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-widest text-blue-200">Available now</p><h2 className="mt-1 font-semibold">PS5 + 2 DualSense</h2></div><span className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold">Rp150K/hari</span></div></div></div></div></div></section><section id="cara-kerja" className="border-y border-border bg-card/35"><div className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><p className="font-mono text-xs uppercase tracking-widest text-primary">Bagaimana cara kerjanya</p><div className="mt-7 grid gap-7 md:grid-cols-3">{[["01","Pilih konsol","Lihat unit yang tersedia dan pilih paket sesuai rencana mainmu."],["02","Atur jadwal","Tentukan tanggal mulai dan lama sewa dengan harga transparan."],["03","Main sepenuhnya","Pesanan dikonfirmasi, konsol siap kamu nikmati."]].map(([n,t,d])=><div key={n} className="border-t border-border pt-5"><span className="font-mono text-xs text-primary">{n}</span><h3 className="mt-3 text-lg font-semibold">{t}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{d}</p></div>)}</div></div></section></main></div> }
-function Auth({signup=false}) { const nav=useNavigate(); const [name,setName]=useState(""); const [password,setPassword]=useState(""); const [show,setShow]=useState(false); const submit=(e:React.FormEvent)=>{e.preventDefault(); if(signup||password!=="admin") nav("/user"); else nav("/admin")}; return <div className="min-h-screen bg-[radial-gradient(circle_at_75%_15%,rgba(40,104,255,.28),transparent_30%),#060913]"><div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-[.85fr_1.15fr]"><aside className="hidden border-r border-white/10 p-10 lg:block"><Brand/><div className="mt-35 max-w-sm"><div className="font-mono text-xs uppercase tracking-widest text-primary">main.ps account</div><h1 className="mt-5 text-4xl font-bold leading-tight">Ruang mainmu, tinggal satu langkah lagi.</h1><p className="mt-5 leading-7 text-muted-foreground">Akses pemesanan cepat, riwayat sewa, serta penawaran khusus untuk member.</p></div><div className="mt-24 flex items-center gap-3 text-sm text-muted-foreground"><ShieldCheck className="text-primary"/> Data akunmu terlindungi</div></aside><main className="flex items-center justify-center px-5 py-12"><div className="w-full max-w-md"><div className="mb-10 lg:hidden"><Brand/></div><Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← Kembali ke beranda</Link><h2 className="mt-8 text-3xl font-bold">{signup?"Buat akun baru":"Selamat datang kembali"}</h2><p className="mt-2 text-sm text-muted-foreground">{signup?"Isi data singkat untuk mulai menyewa konsol.":"Masuk untuk melanjutkan ke ruang bermainmu."}</p><form onSubmit={submit} className="mt-8 space-y-4">{signup&&<label className="block text-sm font-medium">Nama lengkap<input required value={name} onChange={e=>setName(e.target.value)} placeholder="Nama kamu" className="mt-2 w-full rounded-xl border border-border bg-card px-4 py-3.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"/></label>}<label className="block text-sm font-medium">Email<input required type="email" placeholder="nama@email.com" className="mt-2 w-full rounded-xl border border-border bg-card px-4 py-3.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"/></label><label className="block text-sm font-medium">Password<div className="relative mt-2"><input required value={password} onChange={e=>setPassword(e.target.value)} type={show?"text":"password"} placeholder="Masukkan password" className="w-full rounded-xl border border-border bg-card px-4 py-3.5 pr-14 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"/><button type="button" onClick={()=>setShow(!show)} className="absolute right-3 top-3 text-xs text-primary">{show?"Sembunyi":"Lihat"}</button></div></label>{!signup&&<p className="rounded-lg bg-blue-400/8 px-3 py-2 text-xs leading-5 text-blue-200">Demo: gunakan password <b className="font-mono">admin</b> untuk masuk dashboard admin.</p>}<button className="w-full rounded-xl bg-primary py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 hover:bg-blue-500">{signup?"Buat akun & mulai pesan":"Masuk ke akun"} <ArrowRight className="ml-1 inline" size={16}/></button></form><p className="mt-7 text-center text-sm text-muted-foreground">{signup?"Sudah punya akun? ":"Belum punya akun? "}<Link to={signup?"/login":"/daftar"} className="font-semibold text-primary">{signup?"Login":"Buat akun"}</Link></p></div></main></div></div> }
-function UserDashboard(){ const [selected,setSelected]=useState<ConsoleItem|null>(null); const [days,setDays]=useState(1); const [ordered,setOrdered]=useState(false); return <div className="min-h-screen"><Header user/><main className="mx-auto max-w-7xl px-5 py-10 lg:px-8"><div className="rounded-[1.75rem] border border-blue-300/15 bg-[linear-gradient(112deg,#132b63,#0e1730_60%,#0e1424)] px-6 py-7 sm:px-9"><p className="font-mono text-xs uppercase tracking-widest text-blue-200">Dashboard penyewa</p><div className="mt-4 flex flex-wrap items-end justify-between gap-6"><div><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Siap untuk sesi berikutnya?</h1><p className="mt-2 text-sm text-blue-100/70">Pilih unit yang tersedia dan kami siapkan untukmu.</p></div><div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/15 p-3"><CalendarDays className="text-blue-200"/><div><p className="font-mono text-[10px] uppercase text-blue-200">Pesanan aktif</p><p className="text-sm font-semibold">Belum ada pesanan</p></div></div></div></div><div id="koleksi" className="mt-12 flex items-end justify-between"><div><p className="font-mono text-xs uppercase tracking-widest text-primary">Pilih koleksimu</p><h2 className="mt-2 text-2xl font-bold">Unit siap untuk dimainkan</h2></div><button className="hidden items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground sm:flex"><Search size={16}/> Filter unit</button></div><div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{consoles.map(c=><article key={c.id} className="group overflow-hidden rounded-2xl border border-border bg-card transition hover:-translate-y-1 hover:border-blue-400/50"><div className="relative h-48 overflow-hidden bg-secondary"><img src={c.image} alt={c.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105"/><span className="absolute left-3 top-3 rounded-lg bg-background/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-blue-100 backdrop-blur">{c.badge}</span></div><div className="p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">{c.name}</h3><p className="mt-1 text-xs text-muted-foreground">{c.unit}</p></div><p className="text-sm font-semibold text-primary">{money(c.price)}<span className="text-xs text-muted-foreground">/hari</span></p></div><div className="mt-5 flex items-center justify-between border-t border-border pt-4">{c.available?<span className="flex items-center gap-1.5 text-xs text-emerald-300"><i className="size-2 rounded-full bg-emerald-400"/> Tersedia</span>:<span className="flex items-center gap-1.5 text-xs text-amber-300"><i className="size-2 rounded-full bg-amber-400"/> Sedang disewa</span>}<button disabled={!c.available} onClick={()=>{setSelected(c);setOrdered(false);setDays(1)}} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground">{c.available?"Pesan unit":"Tidak tersedia"}</button></div></div></article>)}</div></main>{selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"><div className="relative w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-2xl"><button onClick={()=>setSelected(null)} className="absolute right-5 top-5 text-muted-foreground hover:text-white"><X size={20}/></button>{ordered?<div className="py-7 text-center"><span className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-400/15 text-emerald-300"><Check size={32}/></span><h3 className="mt-5 text-2xl font-bold">Pesanan berhasil dibuat!</h3><p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">Tim kami akan menghubungi kamu untuk konfirmasi pengantaran {selected.name}.</p><button onClick={()=>setSelected(null)} className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-semibold">Kembali ke dashboard</button></div>:<><p className="font-mono text-xs uppercase tracking-widest text-primary">Detail pesanan</p><h3 className="mt-2 text-2xl font-bold">{selected.name}</h3><p className="mt-1 text-sm text-muted-foreground">{selected.unit} · Mulai hari ini</p><div className="mt-6 rounded-xl border border-border bg-background/50 p-4"><div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Lama sewa</span><div className="flex items-center gap-3"><button onClick={()=>setDays(Math.max(1,days-1))} className="grid size-7 place-items-center rounded-md border border-border">−</button><span className="w-12 text-center font-mono text-sm">{days} hari</span><button onClick={()=>setDays(days+1)} className="grid size-7 place-items-center rounded-md border border-border">+</button></div></div><div className="mt-4 flex justify-between border-t border-border pt-4"><span className="text-sm font-semibold">Total estimasi</span><b className="text-primary">{money(selected.price*days)}</b></div></div><button onClick={()=>setOrdered(true)} className="mt-5 w-full rounded-xl bg-primary py-3.5 text-sm font-semibold hover:bg-blue-500">Konfirmasi pesanan <ChevronRight className="ml-1 inline" size={16}/></button></>}</div></div>}</div> }
-function AdminDashboard(){ const [tab,setTab]=useState("Ringkasan"); const nav=useNavigate(); const stats=[{label:"Pesanan aktif",value:"18",icon:ClipboardList,delta:"+4 hari ini"},{label:"Unit tersedia",value:"12",icon:Gamepad2,delta:"dari 20 unit"},{label:"Pendapatan bulan ini",value:"Rp8,4jt",icon:CircleDollarSign,delta:"+18,2% vs lalu"}]; const orders=[['#PS-2408','Raka Pratama','PS5 + DualSense','2 hari','Aktif'],['#PS-2407','Nadia Putri','PS4 Pro','3 hari','Menunggu'],['#PS-2406','Dimas Arya','PS5 Slim','1 hari','Selesai']]; return <div className="min-h-screen bg-background lg:grid lg:grid-cols-[240px_1fr]"><aside className="border-b border-border bg-card/55 p-5 lg:min-h-screen lg:border-b-0 lg:border-r"><Brand/><div className="mt-10 hidden lg:block"><p className="px-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Admin workspace</p><div className="mt-3 grid gap-1">{[["Ringkasan",LayoutDashboard],["Pesanan",ClipboardList],["Unit rental",Gamepad2],["Pengguna",Users]].map(([label,Icon])=><button key={String(label)} onClick={()=>setTab(String(label))} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${tab===label?"bg-primary text-white":"text-muted-foreground hover:bg-secondary hover:text-foreground"}`}><Icon size={17}/>{label}</button>)}</div></div><button onClick={()=>nav("/")} className="mt-7 flex items-center gap-2 px-3 text-sm text-muted-foreground hover:text-red-300 lg:absolute lg:bottom-8"><LogOut size={17}/> Keluar</button></aside><main className="p-5 sm:p-8 lg:p-10"><div className="flex items-center justify-between"><div><p className="font-mono text-xs uppercase tracking-widest text-primary">Admin / {tab}</p><h1 className="mt-2 text-3xl font-bold">{tab==="Ringkasan"?"Selamat pagi, Admin.":tab}</h1></div><div className="flex items-center gap-3"><button className="hidden rounded-xl border border-border px-4 py-2.5 text-sm sm:block"><CalendarDays className="mr-2 inline" size={16}/> Juli 2026</button><span className="grid size-10 place-items-center rounded-xl bg-primary font-semibold">A</span></div></div>{tab!=="Ringkasan"?<div className="mt-8 rounded-2xl border border-border bg-card p-8 text-center"><PackageCheck className="mx-auto text-primary" size={34}/><h2 className="mt-4 text-xl font-semibold">Halaman {tab}</h2><p className="mt-2 text-sm text-muted-foreground">Kelola data {tab.toLowerCase()} dari panel ini.</p></div>:<><section className="mt-8 grid gap-4 md:grid-cols-3">{stats.map(s=>{const I=s.icon;return <div key={s.label} className="rounded-2xl border border-border bg-card p-5"><div className="flex items-start justify-between"><span className="grid size-10 place-items-center rounded-xl bg-blue-400/10 text-primary"><I size={19}/></span><span className="font-mono text-[10px] text-emerald-300">{s.delta}</span></div><p className="mt-5 text-3xl font-bold tracking-tight">{s.value}</p><p className="mt-1 text-sm text-muted-foreground">{s.label}</p></div>})}</section><section className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_.8fr]"><div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border p-5"><div><h2 className="font-semibold">Pesanan terbaru</h2><p className="mt-1 text-xs text-muted-foreground">Pantau aktivitas rental hari ini</p></div><button onClick={()=>setTab("Pesanan")} className="text-xs font-semibold text-primary">Lihat semua</button></div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-secondary/40 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"><tr><th className="px-5 py-3 font-normal">Pesanan</th><th className="px-5 py-3 font-normal">Unit</th><th className="px-5 py-3 font-normal">Durasi</th><th className="px-5 py-3 font-normal">Status</th></tr></thead><tbody>{orders.map(o=><tr key={o[0]} className="border-t border-border"><td className="px-5 py-4"><b className="block text-xs">{o[0]}</b><span className="text-xs text-muted-foreground">{o[1]}</span></td><td className="px-5 py-4 text-xs">{o[2]}</td><td className="px-5 py-4 text-xs">{o[3]}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[11px] ${o[4]==="Aktif"?"bg-emerald-400/10 text-emerald-300":o[4]==="Menunggu"?"bg-amber-400/10 text-amber-300":"bg-blue-400/10 text-blue-200"}`}>{o[4]}</span></td></tr>)}</tbody></table></div></div><div className="rounded-2xl border border-border bg-card p-5"><h2 className="font-semibold">Ketersediaan unit</h2><p className="mt-1 text-xs text-muted-foreground">Pembaruan langsung hari ini</p><div className="mt-7 space-y-5">{[["PS5",7,10],["PS4 Pro",4,6],["PS5 Slim",1,4]].map(([name,now,total])=><div key={String(name)}><div className="flex justify-between text-sm"><span>{name}</span><span className="font-mono text-xs text-muted-foreground">{now}/{total} tersedia</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary" style={{width:`${Number(now)/Number(total)*100}%`}}/></div></div>)}</div></div></section></>}</main></div> }
-function App(){return <BrowserRouter><Routes><Route path="/" element={<Landing/>}/><Route path="/login" element={<Auth/>}/><Route path="/daftar" element={<Auth signup/>}/><Route path="/user" element={<UserDashboard/>}/><Route path="/admin" element={<AdminDashboard/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes></BrowserRouter>}; export default App;
+
+const InventoryContext = React.createContext<InventoryContextValue | undefined>(undefined);
+
+function InventoryProvider({ children }: { children: React.ReactNode }) {
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    if (typeof window === 'undefined') {
+      return initialInventory;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(INVENTORY_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as InventoryItem[];
+        }
+      }
+    } catch {
+      // Fallback to default inventory if storage data is invalid.
+    }
+
+    return initialInventory;
+  });
+  const [orders, setOrders] = useState<OrderItem[]>(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    try {
+      const stored = window.localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          return parsed as OrderItem[];
+        }
+      }
+    } catch {
+      // Fallback to empty orders if storage data is invalid.
+    }
+
+    return [];
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory));
+    }
+  }, [inventory]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    }
+  }, [orders]);
+
+  const adjustStock = (id: number, delta: number) => {
+    setInventory((current) =>
+      current.map((item) =>
+        item.id === id ? { ...item, stock: Math.max(0, item.stock + delta) } : item,
+      ),
+    );
+  };
+
+  const createOrder = (itemId: number, customerName: string, duration: string) => {
+    const selectedItem = inventory.find((item) => item.id === itemId);
+
+    if (!selectedItem || selectedItem.stock <= 0) {
+      return false;
+    }
+
+    setInventory((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? { ...item, stock: item.stock - 1, rented: item.rented + 1 }
+          : item,
+      ),
+    );
+
+    setOrders((current) => [
+      {
+        id: Date.now(),
+        itemId: selectedItem.id,
+        itemName: selectedItem.name,
+        customerName: customerName.trim() || 'Guest',
+        duration: duration.trim() || '1 Hari',
+        createdAt: new Date().toLocaleString('id-ID'),
+        status: 'Pending',
+      },
+      ...current,
+    ]);
+
+    return true;
+  };
+
+  const updateOrderStatus = (orderId: number, status: OrderItem['status']) => {
+    setOrders((current) =>
+      current.map((order) => (order.id === orderId ? { ...order, status } : order)),
+    );
+  };
+
+  return (
+    <InventoryContext.Provider value={{ inventory, orders, adjustStock, createOrder, updateOrderStatus }}>
+      {children}
+    </InventoryContext.Provider>
+  );
+}
+
+function useInventory() {
+  const context = React.useContext(InventoryContext);
+  if (!context) {
+    throw new Error('useInventory must be used within an InventoryProvider');
+  }
+  return context;
+}
+
+function LandingPage() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground text-center p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/20 via-background to-background z-0 pointer-events-none"></div>
+      
+      <div className="z-10 max-w-3xl flex flex-col items-center">
+        <Gamepad2 className="w-24 h-24 text-primary mb-8" />
+        <h1 className="text-5xl font-bold tracking-tight mb-6">Level Up Your Weekend.</h1>
+        <p className="text-xl text-muted-foreground mb-12 max-w-xl">
+          Sewa konsol PlayStation terbaru dengan mudah. Pesan sekarang dan mainkan game favorit Anda tanpa ribet.
+        </p>
+        
+        <div className="flex gap-4">
+          <Link to="/login" className="px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium hover:bg-accent transition-colors">
+            Login Sekarang
+          </Link>
+          <Link to="/login" className="px-8 py-4 bg-secondary text-secondary-foreground rounded-full font-medium hover:bg-muted transition-colors">
+            Buat Akun
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Login() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const navigate = useNavigate();
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const role = resolveDashboardRole(username, password);
+
+    if (role === 'admin') {
+      setErrorMessage('');
+      navigate('/admin');
+      return;
+    }
+
+    if (role === 'user') {
+      setErrorMessage('');
+      navigate('/user');
+      return;
+    }
+
+    setErrorMessage('Username atau password salah. Coba admin/admin atau user/user.');
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
+      <Link to="/" className="absolute top-8 left-8 flex items-center gap-2 text-muted-foreground hover:text-foreground">
+        <Gamepad2 className="w-6 h-6" />
+        <span className="font-bold tracking-widest uppercase text-sm">PS Rental</span>
+      </Link>
+
+      <div className="w-full max-w-md bg-card border border-border rounded-2xl p-8 shadow-2xl">
+        <h2 className="text-3xl font-bold mb-2">Masuk</h2>
+        <p className="text-muted-foreground mb-8">Masukan kredensial Anda untuk melanjutkan.</p>
+        
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <input 
+              type="text" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="user atau admin"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Password..."
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-2">Hint: ketik "admin" untuk masuk sebagai admin, lainnya sebagai user.</p>
+          </div>
+          
+          {errorMessage ? (
+            <p className="text-sm text-red-400">{errorMessage}</p>
+          ) : null}
+
+          <button type="submit" className="w-full bg-primary text-primary-foreground py-3 rounded-lg font-medium mt-4 hover:bg-accent transition-colors">
+            Login
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AdminLayout({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
+      <aside className="w-64 border-r border-border bg-card p-6 flex flex-col">
+        <div className="flex items-center gap-3 mb-12">
+          <div className="p-2 bg-primary rounded-lg">
+            <Settings className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-bold text-lg tracking-tight">Admin Panel</span>
+        </div>
+        
+        <nav className="flex-1 flex flex-col gap-2">
+          <Link to="/admin" className="flex items-center gap-3 px-4 py-3 bg-secondary rounded-lg text-foreground">
+            <Monitor className="w-5 h-5" />
+            <span>Dashboard</span>
+          </Link>
+          <Link to="/admin" className="flex items-center gap-3 px-4 py-3 text-muted-foreground hover:bg-secondary/50 rounded-lg hover:text-foreground">
+            <User className="w-5 h-5" />
+            <span>Users</span>
+          </Link>
+        </nav>
+
+        <button onClick={() => navigate('/')} className="flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors mt-auto">
+          <LogOut className="w-5 h-5" />
+          <span>Keluar</span>
+        </button>
+      </aside>
+      
+      {/* Content */}
+      <main className="flex-1 p-12 overflow-auto">
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function AdminDashboard() {
+  const { inventory, orders, adjustStock, updateOrderStatus } = useInventory();
+
+  const totalAvailable = inventory.reduce((sum, item) => sum + item.stock, 0);
+  const totalRented = inventory.reduce((sum, item) => sum + item.rented, 0);
+  const pendingOrders = orders.filter((order) => order.status === 'Pending').length;
+
+  return (
+    <AdminLayout>
+      <header className="mb-10">
+        <h1 className="text-4xl font-bold mb-2">Dashboard Admin</h1>
+        <p className="text-muted-foreground">Ringkasan penyewaan dan status konsol.</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="bg-card border border-border p-6 rounded-2xl">
+          <h3 className="text-muted-foreground text-sm font-medium mb-4">Pesanan Menunggu</h3>
+          <p className="text-4xl font-bold">{pendingOrders}</p>
+        </div>
+        <div className="bg-card border border-border p-6 rounded-2xl">
+          <h3 className="text-muted-foreground text-sm font-medium mb-4">Unit Tersedia</h3>
+          <p className="text-4xl font-bold">{totalAvailable} <span className="text-lg font-normal text-muted-foreground">/ {totalAvailable + totalRented}</span></p>
+        </div>
+        <div className="bg-card border border-border p-6 rounded-2xl">
+          <h3 className="text-muted-foreground text-sm font-medium mb-4">Pendapatan Hari Ini</h3>
+          <p className="text-4xl font-bold">Rp 450k</p>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl overflow-hidden mb-8">
+        <div className="p-6 border-b border-border">
+          <h2 className="text-xl font-bold">Kelola Unit Sewa</h2>
+        </div>
+        <div className="p-6 space-y-4">
+          {inventory.map((item) => (
+            <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-border p-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="font-semibold">{item.name}</h3>
+                <p className="text-sm text-muted-foreground">{item.price}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => adjustStock(item.id, -1)}
+                  className="h-9 w-9 rounded-full border border-border text-lg transition hover:bg-secondary"
+                  aria-label={`Kurangi unit ${item.name}`}
+                >
+                  −
+                </button>
+                <div className="min-w-14 text-center font-semibold">{item.stock}</div>
+                <button
+                  onClick={() => adjustStock(item.id, 1)}
+                  className="h-9 w-9 rounded-full bg-primary text-primary-foreground text-lg transition hover:bg-accent"
+                  aria-label={`Tambah unit ${item.name}`}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="p-6 border-b border-border">
+          <h2 className="text-xl font-bold">Pesanan Terbaru</h2>
+        </div>
+        <div className="p-6">
+          {orders.length === 0 ? (
+            <p className="text-muted-foreground">Tidak ada pesanan baru saat ini.</p>
+          ) : (
+            <div className="space-y-3">
+              {orders.map((order) => (
+                <div key={order.id} className="rounded-xl border border-border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{order.itemName}</p>
+                      <p className="text-sm text-muted-foreground">{order.customerName} • {order.duration}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-sm ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{order.createdAt}</p>
+                  {order.status === 'Pending' ? (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'Confirmed')}
+                        className="rounded-full bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+                      >
+                        Konfirmasi
+                      </button>
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'Rejected')}
+                        className="rounded-full border border-border px-3 py-2 text-sm font-medium hover:bg-secondary"
+                      >
+                        Tolak
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}
+
+function UserLayout({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="border-b border-border bg-card px-8 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Gamepad2 className="w-6 h-6 text-primary" />
+          <span className="font-bold tracking-widest uppercase">PS Rental</span>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <User className="w-4 h-4" />
+            <span>Hi, User</span>
+          </div>
+          <button onClick={() => navigate('/')} className="text-sm text-red-500 hover:text-red-400">
+            Keluar
+          </button>
+        </div>
+      </header>
+      <main className="flex-1 p-8 max-w-6xl mx-auto w-full">
+        {children}
+      </main>
+    </div>
+  );
+}
+
+function UserDashboard() {
+  const { inventory, orders, createOrder } = useInventory();
+  const [isOrderOpen, setIsOrderOpen] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<number>(inventory[0]?.id ?? 1);
+  const [customerName, setCustomerName] = useState('');
+  const [duration, setDuration] = useState('1 Hari');
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+
+  const openOrderForm = (itemId: number) => {
+    setSelectedItemId(itemId);
+    setIsOrderOpen(true);
+    setFeedbackMessage('');
+  };
+
+  const handleCreateOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    const success = createOrder(selectedItemId, customerName, duration);
+
+    if (!success) {
+      setFeedbackMessage('Unit ini sedang habis, silakan pilih unit lain.');
+      return;
+    }
+
+    setFeedbackMessage(`Pesanan untuk ${inventory.find((item) => item.id === selectedItemId)?.name ?? 'unit'} berhasil dikirim ke admin untuk dikonfirmasi.`);
+    setCustomerName('');
+    setDuration('1 Hari');
+    setIsOrderOpen(false);
+  };
+
+  return (
+    <UserLayout>
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-4xl font-bold mb-2">Pesan PS Sekarang</h1>
+          <p className="text-muted-foreground">Pilih konsol dan paket yang sesuai dengan kebutuhan Anda.</p>
+        </div>
+        <button
+          onClick={() => openOrderForm(inventory[0]?.id ?? 1)}
+          className="bg-primary text-primary-foreground px-6 py-3 rounded-full font-medium hover:bg-accent transition-colors flex items-center gap-2"
+        >
+          <PlusCircle className="w-5 h-5" />
+          Buat Pesanan
+        </button>
+      </div>
+
+      {feedbackMessage ? (
+        <div className="mb-6 rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">
+          {feedbackMessage}
+        </div>
+      ) : null}
+
+      {isOrderOpen ? (
+        <form onSubmit={handleCreateOrder} className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Form Pesanan</h2>
+            <p className="text-sm text-muted-foreground">Isi data berikut untuk membuat pesanan unit.</p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium">Unit</label>
+              <select
+                value={selectedItemId}
+                onChange={(e) => setSelectedItemId(Number(e.target.value))}
+                className="w-full rounded-lg border border-border bg-background px-3 py-3"
+              >
+                {inventory.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium">Durasi Sewa</label>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-3"
+              >
+                <option value="1 Hari">1 Hari</option>
+                <option value="2 Hari">2 Hari</option>
+                <option value="3 Hari">3 Hari</option>
+                <option value="1 Minggu">1 Minggu</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-2 block text-sm font-medium">Nama Pelanggan</label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-3"
+              placeholder="Contoh: Raka"
+            />
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button type="submit" className="rounded-full bg-primary px-5 py-3 font-medium text-primary-foreground hover:bg-accent">
+              Konfirmasi Pesanan
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOrderOpen(false)}
+              className="rounded-full border border-border px-5 py-3 font-medium hover:bg-secondary"
+            >
+              Batal
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="mb-6 rounded-2xl border border-border bg-card p-4">
+        <h2 className="text-lg font-semibold">Pesanan Saya</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Pesanan Anda akan muncul di dashboard admin untuk dikonfirmasi.</p>
+        {orders.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">Belum ada pesanan yang dibuat.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {orders.map((order) => (
+              <li key={order.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                <span>{order.itemName} • {order.customerName}</span>
+                <span className={`rounded-full px-2 py-1 text-xs ${order.status === 'Confirmed' ? 'bg-green-500/10 text-green-500' : order.status === 'Rejected' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                  {order.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {inventory.map((item) => {
+          const isAvailable = item.stock > 0;
+          const status = isAvailable ? 'Tersedia' : 'Tidak Tersedia';
+          const imageSrc = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+              <rect width="800" height="500" rx="32" fill="${item.name.includes('5') ? '#00439c' : '#0070cc'}"/>
+              <rect x="80" y="80" width="640" height="340" rx="24" fill="rgba(255,255,255,0.18)"/>
+              <circle cx="260" cy="260" r="90" fill="rgba(255,255,255,0.9)"/>
+              <rect x="390" y="180" width="210" height="140" rx="16" fill="rgba(255,255,255,0.9)"/>
+              <text x="400" y="245" fill="#0f172a" font-size="34" font-family="Arial, sans-serif">${item.name}</text>
+            </svg>
+          `)}`;
+
+          return (
+            <div key={item.id} className="bg-card border border-border rounded-2xl p-6 flex flex-col">
+              <div className="mb-6 overflow-hidden rounded-lg bg-secondary">
+                <img src={imageSrc} alt={item.name} className="h-40 w-full object-cover" />
+              </div>
+              <h3 className="text-xl font-bold mb-1">{item.name}</h3>
+              <p className="text-primary font-medium mb-4">{item.price}</p>
+              <p className="text-sm text-muted-foreground mb-4">Stok: {item.stock} unit</p>
+
+              <div className="mt-auto flex items-center justify-between">
+                <span className={`text-sm px-3 py-1 rounded-full ${isAvailable ? 'bg-green-500/10 text-green-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                  {status}
+                </span>
+                {isAvailable ? (
+                  <button
+                    onClick={() => openOrderForm(item.id)}
+                    className="text-sm font-medium text-foreground hover:text-primary"
+                  >
+                    Pesan
+                  </button>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Habis</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </UserLayout>
+  );
+}
+
+export default function App() {
+  return (
+    <InventoryProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/user" element={<UserDashboard />} />
+        </Routes>
+      </Router>
+    </InventoryProvider>
+  );
+}
