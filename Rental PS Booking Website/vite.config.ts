@@ -3,9 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
-// Vite config — https://vitejs.dev/config/
+// Vite config â€” https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',
+  // Set base to the repository name for GitHub Pages project site
+  base: '/website-rental-ps/',
   build: {
     sourcemap: false,
     minify: true,
