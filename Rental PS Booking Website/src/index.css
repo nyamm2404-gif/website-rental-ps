@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@font-face { font-family: "Sora"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("https://static.figma.com/font/Sora_wght__1") format("woff2"); }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("https://static.figma.com/font/DMMono-Regular_1") format("woff2"); }
+@font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("https://static.figma.com/font/DMMono-Medium_1") format("woff2"); }
+
+@theme {
+  --font-sans: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground); --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground); --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground); --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground); --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground); --color-border: var(--border); --color-ring: var(--ring); --radius-radius: var(--radius);
+}
+
+@layer base {
+  :root { --background:#060913; --foreground:#f6f8ff; --card:#0e1424; --card-foreground:#f6f8ff; --primary:#3d8cff; --primary-foreground:#fff; --secondary:#171f33; --secondary-foreground:#dce8ff; --muted:#111827; --muted-foreground:#8b9ab8; --accent:#a5e6ff; --accent-foreground:#07101d; --border:#263450; --ring:#67a9ff; --radius:1rem; }
+  html { scroll-behavior: smooth; }
+  body { @apply bg-background text-foreground antialiased font-sans; }
+  ::selection { background:#3d8cff; color:white; }
+}
+
+.bg-grid { background-image: linear-gradient(rgba(105,160,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(105,160,255,.08) 1px, transparent 1px); background-size: 54px 54px; }
+.glow { box-shadow: 0 0 0 1px rgba(99,157,255,.12), 0 28px 80px rgba(20,89,255,.22); }
